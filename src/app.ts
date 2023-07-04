@@ -84,10 +84,31 @@ app.get('/dashboard', (req: Request, res: Response) => {
   }
 });
 
+app.delete('/delete/all', async (req, res) => {
+  try {
+    const db = mongoose.connection.db;
+    
+    // Get all collections
+    const collections = await db.listCollections().toArray();
+    
+    // Create an array of collection names and drop each collection
+    collections
+      .map((collection) => collection.name)
+      .forEach(async (collectionName) => {
+        db.dropCollection(collectionName);
+      });
+    
+    res.sendStatus(200);
+  } catch (e) {
+    console.log(e);
+    res.sendStatus(500);
+  }
+})
 //app.get('/patients', (req: Request, res: Response) => {
 //});
 app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: Response) => {
   const patients = req.body;
+  console.log('POST patients', patients);
   
   const duplicates = await Patient.find({ id: { $in: patients.map( patient => patient.id )} })
   
@@ -95,20 +116,16 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
     const idValid = 'id' in patient;
     const nameValid = patient.name && patient.name.split(' ').length < 3;
     const timeSlotValid = () => {
-      return 'start_attend_time' in patient
-        && 'end_attend_time' in patient
-        && patient.start_attend_time > 0
-        && patient.start_attend_time < 24
-        && patient.end_attend_time > 1
-        && patient.end_attend_time <= 24
-        && patient.start_attend_time < patient.end_attend_time;
+      return 'time_slot' in patient
+        && Number(patient.time_slot.split('-')[0]) < Number(patient.time_slot.split('-')[1])
+        && Number(patient.time_slot.split('-')[1]) > 1
+        && Number(patient.time_slot.split('-')[1]) <= 24
     }
 
     return {
       id: patient.id, idValid,
       name: patient.name, nameValid: nameValid === undefined ? true : nameValid,
-      start_attend_time: patient.start_attend_time,
-      end_attend_time: patient.end_attend_time,
+      time_slot: patient.time_slot,
       timeSlotValid: timeSlotValid(),
       isDuplicate: (duplicates.map(item => item.id).includes(patient.id))
     }
@@ -119,19 +136,20 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
       return {
         id: patient.id,
         name: patient.name,
-        start_attend_time: patient.start_attend_time,
-        end_attend_time: patient.end_attend_time
+        time_slot: patient.time_slot
+        //start_attend_time: patient.start_attend_time,
+        //end_attend_time: patient.end_attend_time
       }
     }
   }).filter((item) => item)
   
   try {
-    if (validPatients.length === patients.length) {
+    if (patients.length > 0 && validPatients.length === patients.length) {
       await Patient.insertMany(patients, { ordered: false })
       return await res.status(200)
         .json({ message: 'Patients inserted successfully', data: patients });
     }
-    throw new Error('Patient collection has wrong format')
+    throw new Error('Patient collection are empty or has wrong format')
   } catch(error) {
     res.status(500).send({ message: error, data: { patientsValidation } })
   }
@@ -142,6 +160,7 @@ app.get('/doctors', (req: Request, res: Response) => {
 });
 app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: Response) => {
   const doctors = req.body;
+  console.log('POST doctors', doctors);
   
   const duplicates = await Doctor.find({ id: { $in: doctors.map( doctor => doctor.id ) } })
   
@@ -149,20 +168,16 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
     const idValid = 'id' in doctor;
     const nameValid = doctor.name && doctor.name.split(' ').length < 3;
     const timeSlotValid = () => {
-      return 'start_reception_time' in doctor
-        && 'end_reception_time' in doctor
-        && doctor.start_reception_time > 0
-        && doctor.start_reception_time < 24
-        && doctor.end_reception_time > 1
-        && doctor.end_reception_time <= 24
-        && doctor.start_reception_time < doctor.end_reception_time;
+      return 'time_slot' in doctor
+        && Number(doctor.time_slot.split('-')[0]) < Number(doctor.time_slot.split('-')[1])
+        && Number(doctor.time_slot.split('-')[1]) > 1
+        && Number(doctor.time_slot.split('-')[1]) <= 24
     }
     
     return {
       id: doctor.id, idValid,
       name: doctor.name, nameValid: nameValid === undefined ? true : nameValid,
-      start_reception_time: doctor.start_reception_time,
-      end_reception_time: doctor.end_reception_time,
+      time_slot: doctor.time_slot,
       timeSlotValid: timeSlotValid(),
       isDuplicate: duplicates.map(item => item.id).includes(doctor.id)
     }
@@ -173,12 +188,12 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
   });
   
   try {
-    if (validDoctors.length === doctors.length) {
+    if (doctors.length > 0 && validDoctors.length === doctors.length) {
       await Doctor.insertMany(doctors)
       return await res.status(200)
         .json({ message: 'Doctors inserted successfully', data: doctors });
     }
-    throw 'Doctor collection has wrong format';
+    throw 'Doctor collection are empty or has wrong format';
   } catch (error) {
     res.status(500).json({ message: error, data: doctorsValidation });
   }
@@ -205,12 +220,12 @@ app.post('/appointments', async (req: Request<never, never, IAppointment[], neve
   });
 
   try {
-    if (validAppointments.length === appointments.length) {
+    if (appointments.length > 0 && validAppointments.length === appointments.length) {
       await Appointment.insertMany( appointments )
       return await res.status(200)
         .json({ message: 'Appointments inserted successfully', data: appointments });
     }
-    throw 'Appointments could not be inserted';
+    throw 'Appointment collection are empty or has wrong format';
   } catch(error) {
     res.status(500).send({ message: error, body: appointmentsValidation });
   }
