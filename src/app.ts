@@ -108,14 +108,13 @@ app.delete('/delete/all', async (req, res) => {
 //});
 app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: Response) => {
   const patients = req.body;
-  console.log('POST patients', patients);
   
   const duplicates = await Patient.find({ id: { $in: patients.map( patient => patient.id )} })
   
   const patientsValidation = patients.map((patient) => {
     const idValid = 'id' in patient;
-    const nameValid = patient.name && patient.name.split(' ').length < 3;
-    const birthDateValid = patient.birth_date && isNaN(Date.parse(patient.birth_date));
+    const nameValid = patient?.name ? patient.name.split(' ').length < 3 : true;
+    const birthDateValid = patient?.birth_date ? !isNaN(Date.parse(patient.birth_date.replace(/(\d+)(\.|-|\/)(\d+)/,'$3/$1'))) : true;
     const isDuplicate = typeof duplicates.find(item => item.id === Number(patient.id)) === 'object';
     const timeSlotValid = () => {
       return 'time_slot' in patient
@@ -123,6 +122,7 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
         && Number(patient.time_slot.split('-')[1]) > 1
         && Number(patient.time_slot.split('-')[1]) <= 24
     }
+    const paramsAmountValid = Object.keys(patient).length < 5
 
     return {
       id: patient.id,
@@ -133,7 +133,8 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
       nameValid: nameValid === undefined ? true : nameValid,
       birthDateValid: birthDateValid === undefined ? true : birthDateValid,
       timeSlotValid: timeSlotValid(),
-      isDuplicate
+      isDuplicate,
+      paramsAmountValid
     }
   });
   
@@ -150,11 +151,11 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
   
   try {
     if (patients.length > 0 && validPatients.length === patients.length) {
-      await Patient.insertMany(patients)
+      await Patient.insertMany(validPatients, { ordered: false})
       return await res.status(200)
-        .json({ message: 'Patients inserted successfully', data: patients });
+        .json(validPatients);
     }
-    throw new Error('Patient collection are empty or has wrong format')
+    throw 'Patient collection are empty or has wrong format'
   } catch(error) {
     res.status(500).send({ message: error, patientsValidation })
   }
@@ -170,16 +171,16 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
   
   const doctorsValidation = doctors.map((doctor) => {
     const idValid = 'id' in doctor;
-    const nameValid = doctor.name && doctor.name.split(' ').length < 3;
-    const birthDateValid = doctor.birth_date && isNaN(Date.parse(doctor.birth_date));
+    const nameValid = doctor.name ? doctor.name.split(' ').length < 3 : true;
+    const birthDateValid = doctor.birth_date ? !isNaN(Date.parse(doctor.birth_date.replace(/(\d+)(\.|-|\/)(\d+)/,'$3/$1'))) : true;
     const isDuplicate = typeof duplicates.find(item => item.id === Number(doctor.id)) === 'object';
-    console.log('isDuplicate',isDuplicate);
     const timeSlotValid = () => {
       return 'time_slot' in doctor
         && Number(doctor.time_slot.split('-')[0]) < Number(doctor.time_slot.split('-')[1])
         && Number(doctor.time_slot.split('-')[1]) > 1
         && Number(doctor.time_slot.split('-')[1]) <= 24
     }
+    const paramsAmountValid = Object.keys(doctor).length < 5
     
     return {
       id: doctor.id,
@@ -190,7 +191,8 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
       nameValid: nameValid === undefined ? true : nameValid,
       birthDateValid: birthDateValid === undefined ? true : birthDateValid,
       timeSlotValid: timeSlotValid(),
-      isDuplicate
+      isDuplicate,
+      paramsAmountValid
     }
   });
   
@@ -207,9 +209,9 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
   
   try {
     if (doctors.length > 0 && validDoctors.length === doctors.length) {
-      await Doctor.insertMany(validDoctors)
+      await Doctor.insertMany(validDoctors, { ordered: false})
       return await res.status(200)
-        .json({ message: 'Doctors inserted successfully', data: doctors });
+        .json(validDoctors);
     }
     throw 'Doctor collection are empty or has wrong format';
   } catch (error) {
@@ -241,10 +243,10 @@ app.post('/appointments', async (req: Request<never, never, IAppointment[], neve
     if (appointments.length > 0 && validAppointments.length === appointments.length) {
       await Appointment.insertMany( appointments )
       return await res.status(200)
-        .json({ message: 'Appointments inserted successfully', data: appointments });
+        .json(appointments);
     }
     throw 'Appointment collection are empty or has wrong format';
   } catch(error) {
-    res.status(500).send({ message: error, body: appointmentsValidation });
+    res.status(500).send({ message: error, appointmentsValidation });
   }
 });
