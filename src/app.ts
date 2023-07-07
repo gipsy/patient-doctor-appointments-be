@@ -7,12 +7,19 @@ import Doctor, { IDoctor } from './models/doctor';
 import Appointment, { IAppointment } from './models/appointment';
 
 const { httpLogger } = require('./middlewares');
-const { logger } = require('./utils');
+const { logger, collector } = require('./utils');
 
-const donation = {
-  user: 0,
-  amount: 0
-};
+interface State {
+  patients: IPatient[];
+  doctors: IDoctor[];
+  appointments: IAppointment[];
+}
+
+const state: State = {
+  patients: [],
+  doctors: [],
+  appointments: []
+}
 
 const app = express();
 dotenv.config();
@@ -28,6 +35,9 @@ const DATABASE_URL = process.env.DATABASE_URL;
 const start = async () => {
   try {
     await mongoose.connect( `${DATABASE_URL}` );
+    state.patients = await Patient.find();
+    state.doctors = await Doctor.find();
+    state.appointments = await Appointment.find();
     await app.listen(PORT, () => {
       logger.info(`Server listening on port ${PORT}`);
     });
@@ -58,23 +68,11 @@ const sendEvent = (_req: Request, res: Response) => {
   const sseId = new Date().toDateString();
 
   setInterval(() => {
-    writeEvent(res, sseId, JSON.stringify(donation));
+    writeEvent(res, sseId, JSON.stringify(collector(state)));
   }, SEND_INTERVAL);
 
-  writeEvent(res, sseId, JSON.stringify(donation));
+  writeEvent(res, sseId, JSON.stringify(collector(state)));
 };
-
-app.post('/donate', (req, res) => {
-  console.log('donate', req)
-  const amount = req.body.amount || 0;
-  
-  if (amount > 0) {
-    donation.amount += amount;
-    donation.user += 1;
-  }
-  
-  return res.json({ message: 'Thank you ?'});
-});
 
 app.get('/dashboard', (req: Request, res: Response) => {
   if (req.headers.accept === 'text/event-stream') {
@@ -151,9 +149,10 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
   
   try {
     if (patients.length > 0 && validPatients.length === patients.length) {
-      await Patient.insertMany(validPatients, { ordered: false})
+      const results = await Patient.insertMany(validPatients, { ordered: false})
+      state.patients = await Patient.find()
       return await res.status(200)
-        .json(validPatients);
+        .json(results);
     }
     throw 'Patient collection are empty or has wrong format'
   } catch(error) {
@@ -209,9 +208,10 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
   
   try {
     if (doctors.length > 0 && validDoctors.length === doctors.length) {
-      await Doctor.insertMany(validDoctors, { ordered: false})
+      const results = await Doctor.insertMany(validDoctors, { ordered: false});
+      state.doctors = await Doctor.find();
       return await res.status(200)
-        .json(validDoctors);
+        .json(results);
     }
     throw 'Doctor collection are empty or has wrong format';
   } catch (error) {
@@ -225,25 +225,35 @@ app.get('/appointments', (req: Request, res: Response) => {
 app.post('/appointments', async (req: Request<never, never, IAppointment[], never>, res: Response) => {
   const appointments = req.body;
   
-  const appointmentsValidation = appointments.map((item) => {
-    let patientIdValid = 'patient_id' in item;
-    let doctorIdValid = 'doctor_id' in item;
+  const appointmentsValidation = appointments.map((appointment) => {
+    let patientIdValid = 'patient_id' in appointment;
+    let doctorIdValid = 'doctor_id' in appointment;
 
     return {
+      patient_id: appointment.patient_id,
+      doctor_id: appointment.doctor_id,
+      start_appointment_time: appointment.start_appointment_time,
       patientIdValid,
       doctorIdValid,
     }
   });
   
-  const validAppointments = appointmentsValidation.filter((appointment) => {
-    return appointment.patientIdValid && appointment.doctorIdValid;
+  const validAppointments = appointmentsValidation.map((appointment) => {
+    if (appointment.doctorIdValid && appointment.patientIdValid) {
+      return {
+        patient_id: appointment.patient_id,
+        doctor_id: appointment.doctor_id,
+        ...( appointment.start_appointment_time && { start_appointment_time: appointment.start_appointment_time } )
+      }
+    }
   });
 
   try {
     if (appointments.length > 0 && validAppointments.length === appointments.length) {
-      await Appointment.insertMany( appointments )
+      const results = await Appointment.insertMany( validAppointments );
+      state.appointments = await Appointment.find();
       return await res.status(200)
-        .json(appointments);
+        .json(results);
     }
     throw 'Appointment collection are empty or has wrong format';
   } catch(error) {
