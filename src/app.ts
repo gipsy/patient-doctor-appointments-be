@@ -4,7 +4,7 @@ import cors from 'cors';
 import dotenv                from 'dotenv';
 import Patient, { IPatient } from './models/patient';
 import Doctor, { IDoctor } from './models/doctor';
-import Appointment, { IAppointment } from './models/appointment';
+import Appointment, { IAppointment, ISuggestedAppointment } from './models/appointment';
 
 const { httpLogger } = require('./middlewares');
 const { logger, collector } = require('./utils');
@@ -102,8 +102,7 @@ app.delete('/delete/all', async (req, res) => {
     res.sendStatus(500);
   }
 })
-//app.get('/patients', (req: Request, res: Response) => {
-//});
+
 app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: Response) => {
   const patients = req.body;
   
@@ -161,8 +160,6 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
 });
 
 
-app.get('/doctors', (req: Request, res: Response) => {
-});
 app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: Response) => {
   const doctors = req.body;
   
@@ -210,8 +207,8 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
     if (doctors.length > 0 && validDoctors.length === doctors.length) {
       const results = await Doctor.insertMany(validDoctors, { ordered: false});
       state.doctors = await Doctor.find();
-      return await res.status(200)
-        .json(results);
+      
+      return await res.status(200).json(results);
     }
     throw 'Doctor collection are empty or has wrong format';
   } catch (error) {
@@ -220,8 +217,6 @@ app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: R
 });
 
 
-app.get('/appointments', (req: Request, res: Response) => {
-});
 app.post('/appointments', async (req: Request<never, never, IAppointment[], never>, res: Response) => {
   const appointments = req.body;
   
@@ -252,8 +247,63 @@ app.post('/appointments', async (req: Request<never, never, IAppointment[], neve
     if (appointments.length > 0 && validAppointments.length === appointments.length) {
       const results = await Appointment.insertMany( validAppointments );
       state.appointments = await Appointment.find();
-      return await res.status(200)
-        .json(results);
+      
+      return await res.status(200).json(results);
+    }
+    throw 'Appointment collection are empty or has wrong format';
+  } catch(error) {
+    res.status(500).send({ message: error, appointmentsValidation });
+  }
+});
+
+app.put('/appointments', async (req: Request<never, never, ISuggestedAppointment[], never>, res: Response) => {
+  const appointments = req.body;
+  
+  const appointmentsValidation = appointments.map((appointment) => {
+    let idValid = '_id' in appointment;
+    let patientIdValid = 'patient_id' in appointment;
+    let doctorIdValid = 'doctor_id' in appointment;
+    
+    return {
+      _id: appointment._id,
+      patient_id: appointment.patient_id,
+      doctor_id: appointment.doctor_id,
+      start_appointment_time: appointment.start_appointment_time,
+      idValid,
+      patientIdValid,
+      doctorIdValid,
+    }
+  });
+  
+  const validAppointments = appointmentsValidation.map((appointment) => {
+    if (appointment.doctorIdValid && appointment.patientIdValid && appointment.idValid) {
+      return {
+        _id: appointment._id,
+        patient_id: appointment.patient_id,
+        doctor_id: appointment.doctor_id,
+        ...( appointment.start_appointment_time && { start_appointment_time: appointment.start_appointment_time } )
+      }
+    }
+  });
+  
+  try {
+    if (appointments.length > 0 && validAppointments.length === appointments.length){
+      //@ts-ignore
+      await Appointment.bulkWrite(appointments.map(appointment => {
+        return {
+          updateOne: {
+            filter: { _id: appointment._id },
+            update: {
+              $set: {
+                start_appointment_time: appointment.start_appointment_time
+              }
+            }
+          }
+        }
+      }))
+      state.appointments = await Appointment.find();
+      return await res.status(200).json('OK');
+      console.log('some happened')
     }
     throw 'Appointment collection are empty or has wrong format';
   } catch(error) {

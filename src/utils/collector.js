@@ -34,19 +34,24 @@ const collector = ({appointments, patients, doctors}) => {
         Number(timeSlotOfRelatedPatient.split('-')[1]),
         Number(timeSlotOfRelatedDoctor.split('-')[1])
       )
-    ].sort();
+    ].sort((a, b) => a - b);
 
     const fits = overlapSlot[0] <= appointment.start_appointment_time
       && appointment.start_appointment_time < overlapSlot[1];
 
-    const conflictedStartTimes = [...new Set([
-      ...appointmentsOfRelatedPatient.filter(item => item.start_appointment_time === appointment.start_appointment_time),
-      ...appointmentsOfRelatedDoctor.filter(item => item.start_appointment_time === appointment.start_appointment_time)
+    const conflictedAppointments = [...new Set([
+      ...appointmentsOfRelatedPatient.filter(item =>
+        item.start_appointment_time !== 'n/a' &&
+        item.start_appointment_time === appointment.start_appointment_time),
+      ...appointmentsOfRelatedDoctor.filter(item =>
+        item.start_appointment_time !== 'n/a' &&
+        item.start_appointment_time === appointment.start_appointment_time)
     ])];
 
     const suggestedAppointmentTime = () => {
+      console.log('overlapSlot',overlapSlot)
       const availableHours = overlapSlot
-        ? Array( overlapSlot[1] - overlapSlot[0] ).fill().map((_, i) => overlapSlot[0] + i)
+        ? Array( overlapSlot[1] - overlapSlot[0] + 1 ).fill().map((_, i) => overlapSlot[0] + i)
         : undefined
 
       return availableHours && availableHours.filter(hr =>
@@ -54,19 +59,23 @@ const collector = ({appointments, patients, doctors}) => {
     }
 
     suggestedAppointments.push({
+      _id: appointment._id,
       patient_id: appointment.patient_id,
       doctor_id: appointment.doctor_id,
       start_appointment_time: suggestedAppointmentTime() || 'n/a',
       inapt: !overlapSlot || !suggestedAppointmentTime(),
-      suggested: appointment.start_appointment_time !== suggestedAppointmentTime() && overlapSlot
+      suggested: appointment.start_appointment_time !== undefined &&
+        appointment.start_appointment_time !== 'n/a' &&
+        Number(appointment.start_appointment_time) !== suggestedAppointmentTime() && overlapSlot
     });
 
     return {
+      _id: appointment._id,
       patient_id: appointment.patient_id,
       doctor_id: appointment.doctor_id,
       start_appointment_time: appointment.start_appointment_time,
-      inapt: !fits,
-      conflicts: conflictedStartTimes.length > 1
+      inapt: !fits || appointment.start_appointment_time === 'n/a',
+      conflicts: conflictedAppointments.length > 1
     }
   });
 
