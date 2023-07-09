@@ -238,7 +238,7 @@ app.post('/appointments', async (req: Request<never, never, IAppointment[], neve
       return {
         patient_id: appointment.patient_id,
         doctor_id: appointment.doctor_id,
-        ...( appointment.start_appointment_time && { start_appointment_time: appointment.start_appointment_time } )
+        ...( appointment.start_appointment_time && { start_appointment_time: Number(appointment.start_appointment_time) } )
       }
     }
   });
