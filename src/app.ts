@@ -335,3 +335,7 @@ app.put('/appointments', async (req: Request<never, never, ISuggestedAppointment
     res.status(500).send({ message: error, appointmentsValidation });
   }
 });
+
+app.get('/', async (req, res) => {
+  res.status(200).send({ message: 'OK' });
+})
