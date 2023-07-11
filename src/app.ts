@@ -95,13 +95,28 @@ app.delete('/delete/all', async (req, res) => {
       .forEach(async (collectionName) => {
         db.dropCollection(collectionName);
       });
-    
+  
+    state.patients = await Patient.find();
+    state.doctors = await Doctor.find();
+    state.appointments = await Appointment.find();
     res.sendStatus(200);
   } catch (e) {
     console.log(e);
     res.sendStatus(500);
   }
 })
+
+app.get('/patient/:id', async(req: Request, res: Response) => {
+  const id = req.params.id;
+  
+  try {
+    const patient = await Patient.findOne({ id });
+  
+    return await res.status(200).json(patient);
+  } catch (error) {
+    res.sendStatus(500);
+  }
+});
 
 app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: Response) => {
   const patients = req.body;
@@ -150,8 +165,7 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
     if (patients.length > 0 && validPatients.length === patients.length) {
       const results = await Patient.insertMany(validPatients, { ordered: false})
       state.patients = await Patient.find()
-      return await res.status(200)
-        .json(results);
+      return await res.status(200).json(results);
     }
     throw 'Patient collection are empty or has wrong format'
   } catch(error) {
@@ -159,6 +173,18 @@ app.post('/patients', async(req: Request<never, never, IPatient[], never>, res: 
   }
 });
 
+app.get('/doctor/:id', async(req: Request, res: Response) => {
+  const id = req.params.id;
+  
+  try {
+    const doctor = await Doctor.findOne({ id });
+    console.log('doctor',doctor)
+    
+    return await res.status(200).json(doctor);
+  } catch (error) {
+    res.sendStatus(500);
+  }
+});
 
 app.post('/doctors', async (req: Request<never, never, IDoctor[], never>, res: Response) => {
   const doctors = req.body;
@@ -303,7 +329,6 @@ app.put('/appointments', async (req: Request<never, never, ISuggestedAppointment
       }))
       state.appointments = await Appointment.find();
       return await res.status(200).json('OK');
-      console.log('some happened')
     }
     throw 'Appointment collection are empty or has wrong format';
   } catch(error) {
