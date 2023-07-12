@@ -25,11 +25,11 @@ const app = express();
 dotenv.config();
 
 app.use(express.json());
-app.use(cors());
+app.use(cors({ origin: true }));
 
 app.use(httpLogger);
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 4650;
 const DATABASE_URL = process.env.DATABASE_URL;
 
 const start = async () => {
@@ -59,10 +59,12 @@ const writeEvent = (res: Response, sseId: string, data: string) => {
 };
 
 const sendEvent = (_req: Request, res: Response) => {
+  
   res.writeHead(200, {
     'Cache-Control': 'no-cache',
     Connection: 'keep-alive',
     'Content-Type': 'text/event-stream',
+    'Access-Control-Allow-Credentials': 'true'
   });
 
   const sseId = new Date().toDateString();

@@ -50,21 +50,18 @@ const collector = ({appointments, patients, doctors}) => {
       && appointment.start_appointment_time < overlapSlot(index)[1];
   }
 
-  const conflictedRequestedAppointments = (appointment) => {
-    return [...new Set([
-      ...usedStartTimesOfDPR(appointment.patient_id, appointments).filter(item =>
-        item.start_appointment_time === appointment.start_appointment_time),
-
-      ...usedStartTimesOfDPR(appointment.doctor_id, appointments).filter(item =>
-        item.start_appointment_time === appointment.start_appointment_time)
-    ])]
+  const isConflicted = (appointment) => {
+    return usedStartTimesOfDPR(appointment.patient_id, appointments, 'patient_id').filter(item =>
+      item === appointment.start_appointment_time).length > 1
+      || usedStartTimesOfDPR(appointment.doctor_id, appointments, 'doctor_id').filter(item =>
+      item === appointment.start_appointment_time).length > 1
   }
 
-  const rearrangeRequired = (idx, suggestedAppointments) => {
+  const rearrangedAppointments = (appointment) => {
     let newSuggestedAppointments = []
     const availableDoctors = doctors.map(doctor => {
 
-      const patientTimeSlot = timeSlotByPatientId(appointments[idx].patient_id, patients)
+      const patientTimeSlot = timeSlotByPatientId(appointment.patient_id, patients)
         .split('-').map(hr => Number(hr));
       const doctorTimeSlot = timeSlotByDoctorId(doctor.id, doctors)
         .split('-').map(hr => Number(hr));
@@ -118,11 +115,11 @@ const collector = ({appointments, patients, doctors}) => {
       }).filter(doctor => doctor.time_range.length > 0);
     }
 
-    const suggestedTime = () => {
-      const availableHours = overlapSlot(appointmentIdx)
-        ? range( overlapSlot(appointmentIdx)[ 0 ], overlapSlot(appointmentIdx)[ 1 ] )
-        : undefined;
+    const availableHours = overlapSlot(appointmentIdx)
+      ? range( overlapSlot(appointmentIdx)[ 0 ], overlapSlot(appointmentIdx)[ 1 ] )
+      : undefined;
 
+    const suggestedTime = () => {
       if (availableHours.length > 0) {
         return availableHours.filter(hr =>
           !usedStartTimesOfDPR(appointment.patient_id, suggestedAppointments, 'patient_id')?.includes(hr)
@@ -137,14 +134,15 @@ const collector = ({appointments, patients, doctors}) => {
         ? suggestedAvailableDoctors()[0]?.id
         : appointment.doctor_id,
       start_appointment_time:
-        suggestedTime() || suggestedAvailableDoctors()[0]?.time_range[0],
+        suggestedTime()
+        || suggestedAvailableDoctors()[0]?.time_range[0],
       suggested:
         !fits(appointment, appointmentIdx)
         || suggestedTime() !== appointment.start_appointment_time
     });
 
-    if (suggestedAvailableDoctors().length === 0) {
-      suggestedAppointments = rearrangeRequired(appointmentIdx, suggestedAppointments);
+    if (suggestedTime() === undefined || suggestedAvailableDoctors().length === 0) {
+      suggestedAppointments = rearrangedAppointments(appointment);
     }
 
     return {
@@ -152,7 +150,7 @@ const collector = ({appointments, patients, doctors}) => {
       patient_id: appointment.patient_id,
       doctor_id: appointment.doctor_id,
       start_appointment_time: appointment.start_appointment_time,
-      conflicts: conflictedRequestedAppointments(appointment).length > 1,
+      conflicts: isConflicted(appointment),
       inapt: !fits(appointment, appointmentIdx)
     }
   });
